@@ -74,12 +74,43 @@
       (buffer-substring (region-beginning) (region-end))
     (engine/prompted-search-term engine-name)))
 
+(defun engine/format (string replace)
+  "Format a string out of a format-string and a string argument.
+
+Refer to the docstring for `defengine' for the format of
+STRING. Note that unlike `format', if an unrecognized format
+operation is encountered, only a warning is signaled, rather than
+an error."
+  (with-temp-buffer
+    (insert string)
+    (goto-char (point-min))
+    (let ((no-replace t))
+      (while (not (eobp))
+	(skip-chars-forward "^%")
+	(setq
+	 no-replace
+	 (cond
+	  ((looking-at "%%")
+	   (replace-match "%" t t))
+	  ((looking-at "%s")
+	   (replace-match (url-hexify-string replace) t t))
+	  ((looking-at "%(\\([^)]+\\))")
+	   (replace-match
+	    (save-match-data
+	      (funcall (intern-soft (match-string 1)) replace)) t t))
+	  ((looking-at "%.")
+	   (warn "Unrecognized format operation %s" (match-string 0)) no-replace)
+	  (t no-replace))))
+      (when no-replace
+	(goto-char (point-max))
+	(insert (url-hexify-string replace)))
+      (buffer-string))))
+
 (defun engine/execute-search (search-engine-url search-term)
   "Display the results of the query."
   (interactive)
   (browse-url
-   (format search-engine-url
-           (url-hexify-string search-term))))
+   (engine/format search-engine-url search-term)))
 
 (defun engine/function-name (engine-name)
   (intern (concat "engine/search-" (downcase (symbol-name engine-name)))))
@@ -100,14 +131,33 @@
 (defmacro defengine (engine-name search-engine-url &optional keybinding)
   "Define a custom search engine.
 
-`engine-name' is a symbol naming the engine.
-`search-engine-url' is the url to be queried, with a \"%s\"
-standing in for the search term.
-The optional value `keybinding' is a string describing the key to
-bind the new function.
+ENGINE-NAME is a symbol naming the engine.
 
-Keybindings are prefixed by the `engine/keymap-prefix', which
-defaults to `C-c /'.
+SEARCH-ENGINE-URL is the url to be queried, with an optional
+format-string which specifies how the search term should be
+interpolated into the url, as follows:
+
+  %s is replaced with the url-encoded search term
+
+  %(my-function) is replaced by the results of a call to a custom
+  function, `my-function', which must take the raw search term as
+  its only argument and return a properly encoded string.
+
+  Multiple occurences of the above format specifiers are
+  permitted; the search term will be applied to all of them. If
+  the url contains none of the above format specifiers, the
+  url-encoded search term is appended to the url.
+
+  %% is replaced with a single %, for compatibility with url
+  strings written for use with `format'; however, any %-strings
+  not recognized as one of the format specifiers above will be
+  left alone, rather than throwing an error.
+
+The optional value KEYBINDING is a string describing the key to
+bind to the new function. Keybindings are prefixed by the
+`engine/keymap-prefix', which defaults to \"C-c /\". See the
+docstring for function `engine-mode' for a current list of key
+bindings.
 
 For example, to search Wikipedia, use:
 
