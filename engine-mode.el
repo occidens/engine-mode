@@ -97,6 +97,7 @@
     `(define-key engine-mode-map (kbd ,(engine/scope-keybinding keybinding))
        (quote ,(engine/function-name engine-name)))))
 
+;;;###autoload
 (defmacro defengine (engine-name search-engine-url &optional keybinding)
   "Define a custom search engine.
 
